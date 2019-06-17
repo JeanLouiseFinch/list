@@ -5,15 +5,12 @@ import (
 	"errors"
 	"fmt"
 )
-/* 
-Так как я не хотел, чтобы отдельный элемент смотрел наверх, то пришлось добавить булево поле-чек на удаление
-Из-за этого при вызове методов списка вначале происходит сверка не был ли первый/последний элемент удален 
-*/
 
 //List структура "список". для обновременного доступа добавлен мьютекс
 type List struct{
-	first *item
-	last *item
+	first *Item
+	last *Item
+	len int
 	sync.Mutex
 }
 
@@ -21,36 +18,12 @@ type List struct{
 func NewList() *List {
 	return &List{}
 }
-//2 функции для сверки не был ли первый/последний элемент удален. Нужно после удаление последнего элемента в списке
-func (l *List) checkFirst() {
-	l.Lock()
-	if l.first != nil && l.first.delete {
-		for it := l.first; it != nil; it = l.first.next {
-			if it != nil && !it.delete {
-				l.first = it
-				break
-			}
-		}
-	}	
-	l.Unlock()
-}
-func (l *List) checkLast() {
-	l.Lock()
-	if l.last != nil && l.last.delete {
-		for it := l.last; it != nil; it = l.last.prev {
-			if it != nil && !it.delete {
-				l.last = it
-				break
-			}
-		}
-	}	
-	l.Unlock()
-}
+
 
 //Print для удобного просмотра результата
 func (l *List) Print() {
-	l.checkFirst()
-	if l.first == nil || l.first.delete {
+
+	if l.len == 0 {
 		fmt.Println("List empty!")
 		return
 	}
@@ -65,19 +38,16 @@ func (l *List) Print() {
 	fmt.Printf("\n")
 }
 //First возвращает первый элемент или ошибку если его нет
-func (l *List) First() (*item,error) {
-	l.checkFirst()
-
-	if l.first == nil || l.first.delete{
+func (l *List) First() (*Item,error) {
+	if l.first == nil {
 		return nil,errors.New("First element nil")
 	}
 	return l.first,nil
 }
 
 //Last возвращает последний элемент или ошибку если его нет
-func (l *List) Last() (*item,error) {
-	l.checkLast()
-	if l.last == nil || l.last.delete{
+func (l *List) Last() (*Item,error) {
+	if l.last == nil {
 		return nil,errors.New("Last element nil")
 	}
 	return l.last,nil
@@ -85,45 +55,66 @@ func (l *List) Last() (*item,error) {
 
 //Len возвращает длину списка
 func (l *List) Len() int{
-	l.checkFirst()
-	l.checkLast()
-	var len int
-	if l.first == nil || l.first.delete {
-		return len
-	}
-	len++
-	for it := l.first; it.next != nil; it = it.next {
-		len++
-	}
-	return len
+	return l.len
 }
 
 //PushFront вставка нового значения в начале списка
 func (l *List) PushFront(value interface{}) {
 	l.Lock()
-	new := newItem(value)
-	if l.first != nil && !l.first.delete{
+	new := NewItem(value)
+	if l.first != nil {
 		new.next = l.first
 		l.first.prev = new
 	}
-	if l.last == nil || l.last.delete{
+	if l.last == nil {
 		l.last = new
 	}
 	l.first = new
+	l.len++
 	l.Unlock()
 }
 
 //PushBack вставка нового значения в конце списка
 func (l *List) PushBack(value interface{}) {
 	l.Lock()
-	new := newItem(value)
-	if l.last != nil && !l.last.delete{
+	new := NewItem(value)
+	if l.last != nil {
 		new.prev = l.last
 		l.last.next = new
 	}
-	if l.first == nil || l.first.delete{
+	if l.first == nil {
 		l.first = new
 	}
 	l.last = new
+	l.len++
+	l.Unlock()
+}
+
+// RemoveItem удаляем элемент. очищаем все ссылки
+func (l *List) RemoveItem(ri *Item) {
+	l.Lock()
+	if ri == nil || l.len == 0 {
+		return
+	}
+	
+	if ri.prev != nil {
+		ri.prev.next = ri.next
+	} else {
+		if l.first == ri {
+			l.first = ri.next
+		}
+	}
+	if ri.next != nil {
+		ri.next.prev = ri.prev
+	} else {
+		if l.last == ri {
+			l.last = ri.prev
+		}
+	}
+
+	ri.next = nil
+	ri.prev = nil
+
+	l.len--
 	l.Unlock()
 }
